@@ -1002,7 +1002,7 @@
     var lines = state.guesses.map(function(g){ return g.cmp===0 ? '🟩' : (g.cmp<0 ? '⬆️' : '⬇️'); });
     var header = 'SANDUBA ' + (state.mode==='daily' ? state.dateKey : 'jogo livre') +
       ' ' + (state.won ? state.guesses.length : 'X') + '/' + MAX_GUESSES;
-    return header + '\n' + lines.join('') + '\nhttps://betweenle.com/';
+    return header + '\n' + lines.join('') + '\nhttps://a-hanauer.github.io/sanduba-jogo/';
   }
 
   /* ---------- eventos ---------- */
