@@ -899,6 +899,9 @@
   /* ---------- eventos ---------- */
   document.addEventListener('keydown', function(e){
     if(document.querySelector('.overlay.open')) return;
+    // o campo invisível (#ios-typer) já trata suas próprias teclas via beforeinput;
+    // ignorar aqui evita processar a mesma tecla duas vezes (letra dobrada / backspace duplo).
+    if(e.target && e.target.id === 'ios-typer') return;
     if(e.key === 'Enter'){ e.preventDefault(); submitGuess(); return; }
     if(e.key === 'Backspace'){ e.preventDefault(); backspace(); return; }
     var k = base(e.key.toLowerCase());
@@ -911,19 +914,35 @@
   /* ---------- campo invisível para habilitar o teclado nativo (iOS/Android) ---------- */
   (function(){
     var iosTyper = document.getElementById('ios-typer');
+    // usa beforeinput com preventDefault para TODA inserção/remoção — o valor do
+    // campo nunca chega a mudar de verdade, o que evita o autocorretor/preditivo
+    // do iOS re-disparar eventos extras e causar letras em dobro ou perdidas.
     iosTyper.addEventListener('beforeinput', function(e){
       if(e.inputType && e.inputType.indexOf('delete') === 0){
         e.preventDefault();
         backspace();
+        return;
+      }
+      if(e.inputType === 'insertText' || e.inputType === 'insertReplacementText' || e.inputType === 'insertFromPaste'){
+        e.preventDefault();
+        var data = e.data || '';
+        for(var i=0;i<data.length;i++){
+          var ch = base(data[i].toLowerCase());
+          if(/^[a-z]$/.test(ch)) typeLetter(ch);
+        }
       }
     });
+    // rede de segurança: se algum navegador não suportar beforeinput cancelável,
+    // processa pelo 'input' normal e sempre limpa o campo em seguida.
     iosTyper.addEventListener('input', function(){
       var val = iosTyper.value;
-      for(var i=0;i<val.length;i++){
-        var ch = base(val[i].toLowerCase());
-        if(/^[a-z]$/.test(ch)) typeLetter(ch);
+      if(val){
+        for(var i=0;i<val.length;i++){
+          var ch = base(val[i].toLowerCase());
+          if(/^[a-z]$/.test(ch)) typeLetter(ch);
+        }
       }
-      iosTyper.value = '';
+      if(iosTyper.value) iosTyper.value = '';
     });
     iosTyper.addEventListener('keydown', function(e){
       if(e.key === 'Enter'){ e.preventDefault(); submitGuess(); }
