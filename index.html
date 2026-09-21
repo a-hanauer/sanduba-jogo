@@ -191,12 +191,22 @@
   }
 
   #msg{min-height:16px;font-size:.76rem;color:var(--bad);text-align:center;margin:4px 0;}
-  #hint{min-height:14px;font-size:.72rem;color:var(--text-dim);text-align:center;margin-bottom:8px;}
+  #hint{min-height:14px;font-size:.74rem;color:var(--text-dim);text-align:left;margin-bottom:8px;}
   .shake{animation:shake .35s;}
   @keyframes shake{
     10%,90%{transform:translateX(-2px);} 20%,80%{transform:translateX(4px);}
     30%,50%,70%{transform:translateX(-7px);} 40%,60%{transform:translateX(7px);}
   }
+
+  /* ---- painel informativo de letras (não interativo) ---- */
+  .letters-panel{background:var(--card);border:1px solid var(--border);border-radius:12px;
+    padding:7px 12px 9px;margin-bottom:8px;}
+  .letters-panel-title{font-size:.6rem;font-weight:400;letter-spacing:1.5px;color:var(--text-dim);
+    text-align:left;text-transform:uppercase;margin-bottom:6px;opacity:.85;}
+  .letters-panel-row{display:flex;flex-wrap:nowrap;gap:0;}
+  .lp-letter{flex:1 1 0;min-width:0;text-align:center;color:var(--text);font-weight:700;
+    text-transform:uppercase;font-size:clamp(.5rem,3vw,.78rem);}
+  .lp-letter.excluded{color:var(--text-dim);font-weight:400;text-decoration:line-through;opacity:.45;}
 
   /* ---- teclado QWERTY em tela (substitui o teclado nativo) ---- */
   #keyboard{
@@ -275,6 +285,8 @@
     </div>
   </div>
 
+  <div id="hint"></div>
+
   <div class="timeline-block">
     <div class="timeline-title">TENTATIVAS</div>
     <div class="timeline-row">
@@ -303,7 +315,11 @@
   </div>
 
   <div id="msg"></div>
-  <div id="hint"></div>
+
+  <div class="letters-panel">
+    <div class="letters-panel-title">LETRAS POSSÍVEIS</div>
+    <div class="letters-panel-row" id="excluded-row"></div>
+  </div>
 
   <div id="keyboard">
     <div class="kb-row" id="kb-row-1"></div>
@@ -338,6 +354,7 @@
     <h2>Como jogar</h2>
     <p>Existe um <b>recheio secreto de 5 letras</b> escondido em algum lugar de um dicionário ordenado <b>alfabeticamente</b> — e ele está sempre entre duas fatias de pão.</p>
     <p>Digite usando o teclado abaixo — o mesmo alfabeto de A a Z sempre disponível, igual ao Betweenle original. Não se preocupe com acentos: digitar "c" também aceita palavras com "ç", "a" aceita "á"/"ã", e assim por diante. Ao confirmar, se a combinação não existir no dicionário ou já tiver sido eliminada pelo intervalo atual, o jogo avisa e não gasta uma tentativa — descobrir quais letras ainda fazem sentido é parte do desafio.</p>
+    <p>No painel "letras possíveis", as letras já descartadas pelo intervalo atual para o próximo espaço aparecem apagadas e riscadas; as que ainda podem entrar ficam em destaque. É só uma dica visual — não trava nada no teclado.</p>
     <p>Depois de confirmar, a palavra vira uma nova fatia em cima ou embaixo, junto com uma <b>pontuação fixa</b> — quanto menor o número, mais perto do recheio ela está. Essa escala não muda ao longo da partida, então dá pra comparar a distância de qualquer palpite com qualquer outro. O recheio está sempre escondido entre as duas fatias. Você tem <b>14 tentativas</b>.</p>
   </div>
 </div>
@@ -670,6 +687,41 @@
     return -1;
   }
 
+  // Retorna null quando ainda não há nenhum limite (nenhum palpite enviado ainda).
+  // Depois do primeiro palpite, calcula o intervalo alfabético possível para o
+  // próximo espaço comparando com os limites atuais — não consulta o dicionário,
+  // então mostra a faixa inteira de possibilidades em vez de só letras que já
+  // formam palavras reais (isso daria dica demais). Usada apenas para EXIBIR
+  // quais letras já foram descartadas — o teclado continua sempre liberado.
+  function availableLettersForNextSlot(){
+    if(!state.low && !state.high) return null;
+    var pos = nextEmptyPos();
+    if(pos === -1) return null;
+    var prefix = currentInput.slice(0, pos);
+
+    var minCh = null, maxCh = null;
+    if(state.low){
+      var L = Array.from(state.low.word).map(base);
+      var tiedLow = true;
+      for(var i=0;i<pos;i++){ if(prefix[i] !== L[i]){ tiedLow = false; break; } }
+      if(tiedLow) minCh = L[pos];
+    }
+    if(state.high){
+      var H = Array.from(state.high.word).map(base);
+      var tiedHigh = true;
+      for(var j=0;j<pos;j++){ if(prefix[j] !== H[j]){ tiedHigh = false; break; } }
+      if(tiedHigh) maxCh = H[pos];
+    }
+    var set = {};
+    var alphabet = 'abcdefghijklmnopqrstuvwxyz';
+    for(var k=0;k<alphabet.length;k++){
+      var c = alphabet[k];
+      if(minCh && c < minCh) continue;
+      if(maxCh && c > maxCh) continue;
+      set[c] = true;
+    }
+    return set;
+  }
 
   function typeLetter(ch){
     if(state.over || animating) return;
@@ -854,11 +906,12 @@
     if(state.over){
       hint.textContent = state.won ? 'Você encontrou o recheio secreto!' : 'Suas tentativas acabaram.';
     } else if(!state.low && !state.high){
-      hint.textContent = 'O recheio secreto está em algum lugar do dicionário. Digite no teclado abaixo.';
+      hint.textContent = '';
     } else {
-      hint.textContent = 'O recheio está escondido entre essas duas fatias acima.';
+      hint.textContent = 'O recheio está escondido entre essas duas fatias abaixo.';
     }
 
+    renderExcludedRow();
     renderKeyboard();
     renderStats();
     document.getElementById('practice-toggle').checked = (state.mode === 'practice');
@@ -867,6 +920,25 @@
   var QWERTY_ROW1 = 'qwertyuiop'.split('');
   var QWERTY_ROW2 = 'asdfghjkl'.split('');
   var QWERTY_ROW3 = 'zxcvbnm'.split('');
+
+  function renderExcludedRow(){
+    var panel = document.querySelector('.letters-panel');
+    var row = document.getElementById('excluded-row');
+    if(state.over){
+      panel.style.display = 'none';
+      return;
+    }
+    panel.style.display = '';
+    var avail = availableLettersForNextSlot();
+    var alphabet = 'abcdefghijklmnopqrstuvwxyz';
+    var html = '';
+    for(var i=0;i<alphabet.length;i++){
+      var c = alphabet[i];
+      var isExcluded = avail && !avail[c];
+      html += '<span class="lp-letter' + (isExcluded ? ' excluded' : '') + '">' + c + '</span>';
+    }
+    row.innerHTML = html;
+  }
 
   function renderKeyboard(){
     var full = nextEmptyPos() === -1;
