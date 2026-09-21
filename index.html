@@ -670,48 +670,11 @@
     return -1;
   }
 
-  // Retorna null quando ainda não há nenhum limite (nenhum palpite enviado ainda) —
-  // nesse caso o teclado fica totalmente livre, sem restrição nenhuma.
-  // Depois do primeiro palpite, calcula o intervalo alfabético possível para o
-  // próximo espaço comparando com os limites atuais — não consulta o dicionário,
-  // então mostra a faixa inteira de possibilidades em vez de só letras que já
-  // formam palavras reais (isso daria dica demais).
-  function availableLettersForNextSlot(){
-    if(!state.low && !state.high) return null;
-    var pos = nextEmptyPos();
-    if(pos === -1) return null;
-    var prefix = currentInput.slice(0, pos);
-
-    var minCh = null, maxCh = null;
-    if(state.low){
-      var L = Array.from(state.low.word).map(base);
-      var tiedLow = true;
-      for(var i=0;i<pos;i++){ if(prefix[i] !== L[i]){ tiedLow = false; break; } }
-      if(tiedLow) minCh = L[pos];
-    }
-    if(state.high){
-      var H = Array.from(state.high.word).map(base);
-      var tiedHigh = true;
-      for(var j=0;j<pos;j++){ if(prefix[j] !== H[j]){ tiedHigh = false; break; } }
-      if(tiedHigh) maxCh = H[pos];
-    }
-    var set = {};
-    var alphabet = 'abcdefghijklmnopqrstuvwxyz';
-    for(var k=0;k<alphabet.length;k++){
-      var c = alphabet[k];
-      if(minCh && c < minCh) continue;
-      if(maxCh && c > maxCh) continue;
-      set[c] = true;
-    }
-    return set;
-  }
 
   function typeLetter(ch){
     if(state.over || animating) return;
     var pos = nextEmptyPos();
     if(pos === -1) return;
-    var avail = availableLettersForNextSlot();
-    if(avail && !avail[ch]) return;
     currentInput[pos] = ch;
     render();
   }
@@ -909,13 +872,12 @@
     var full = nextEmptyPos() === -1;
     var noneFilled = currentInput.every(function(c){return !c;});
     var baseDisabled = state.over || animating || full;
-    var avail = baseDisabled ? null : availableLettersForNextSlot();
 
-    renderKbRow('kb-row-1', QWERTY_ROW1, baseDisabled, avail);
-    renderKbRow('kb-row-2', QWERTY_ROW2, baseDisabled, avail, {
+    renderKbRow('kb-row-1', QWERTY_ROW1, baseDisabled);
+    renderKbRow('kb-row-2', QWERTY_ROW2, baseDisabled, {
       after: buildSpecialKey('⌫', 'kb-back', state.over || animating || noneFilled, backspace)
     });
-    renderKbRow('kb-row-3', QWERTY_ROW3, baseDisabled, avail, {
+    renderKbRow('kb-row-3', QWERTY_ROW3, baseDisabled, {
       after: buildSpecialKey('ENTER', 'kb-enter', state.over || animating || !full, submitGuess)
     });
   }
@@ -928,7 +890,7 @@
     btn.addEventListener('click', function(){ onClick(); btn.blur(); });
     return btn;
   }
-  function renderKbRow(id, letters, baseDisabled, avail, extra){
+  function renderKbRow(id, letters, baseDisabled, extra){
     var row = document.getElementById(id);
     row.innerHTML = '';
     letters.forEach(function(ch){
@@ -936,7 +898,7 @@
       btn.type = 'button';
       btn.className = 'kb-key';
       btn.textContent = ch;
-      btn.disabled = baseDisabled || (avail && !avail[ch]);
+      btn.disabled = baseDisabled;
       btn.addEventListener('click', function(){ typeLetter(ch); btn.blur(); });
       row.appendChild(btn);
     });
